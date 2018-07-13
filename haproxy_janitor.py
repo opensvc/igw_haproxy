@@ -5,30 +5,6 @@
 # and reloaded to be up-to-date.
 
 
-
-while True:
-	data = recv_message(lsnr)[0]
-	changes = data.get("data", {})
-	for change in changes:
-		print(change)
-
-def function():
-	data = recv_message(lsnr)
-	changes = data.get("data", {})
-	for change in changes:
-		print(change)
-
-
-lsnr_path = "/var/lib/opensvc/lsnr/lsnr.sock"
-
-lsnr = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-lsnr.connect(lsnr_path)
-lsnr.sendall(msg_encode({"action": "events"}))
-data = recv_message(lsnr)[0]
-changes = data.get("data", {})
-lsnr.close()
-
-
 # functions to edit the haproxy configuration file :
 
 def replace_line(file, line, char):
@@ -50,20 +26,9 @@ def find_line(file_name, regex):
     return lines_to_change
  
 
-# test server (JS) 
-var http = require('http');
-
-function serve(ip, port)
-{
-        http.createServer(function (req, res) {
-            res.writeHead(200, {'Content-Type': 'text/plain'});
-            res.write(JSON.stringify(req.headers));
-        }).listen(port, ip);
-        console.log('Server running at http://'+ip+':'+port+'/');
-}
-
 
 CONFIG_FILE = '/etc/haproxy/haproxy.conf'
+HAPROXY_PID = '/etc/haproxy/haproxy.pid'
 
 # HAProxy parameters
 
@@ -185,11 +150,17 @@ SERVER_PARAMETERS = [
     'ttime',
 ]
 
-# HAProxy changing URL :
-# reqrep ^([^\ :]*)\ /\?pdf=(.*)(\ [^\ ]+)$  \1\ /newpdf?search=%22\2%22\3
-
 def haproxy_status():
-    # TODO: get haproxy status/pids
+    pid = 0
+    try:
+        fileh = HAPROXY_PID
+        with open(fileh) as f:
+            pid = f.read()
+        return pid
+    except:
+        print("couldn't get haproxy status")
+        return
+
 
 def reload_haproxy():
     reload = False
@@ -201,11 +172,10 @@ def reload_haproxy():
             start = time.time()
             retry = start
             current_haproxy_status = harpoxy_status()
-            # TODO: reload the config file / init haproxy
             new_haproxy_status = haproxy_status()
             # infinite loop until we reload
             while True:
-                if len(current_haproxy_status - new_haproxy_status) >= 1:
+                if (current_haproxy_status - new_haproxy_status) >= 1:
                     print("reload succesful")
                     break
                 ifretry = time.time() - retry
@@ -237,15 +207,15 @@ class ConfigHaproxy(object):
             global
                 log /dev/log local0
                 log /dev/log local1 notice
-                maxconn 50000
+                maxconn 2000
             defaults
                 load-server-state-from-file global
                 log   global
                 backlog   10000
                 maxconn   50000
-                timeout connect 5000ms
-                timeout client 50000ms
-                timeout server 50000ms
+                timeout connect 100000ms
+                timeout client 40000ms
+                timeout server 10000ms
                 timeout http-keep-alive  1s
                 timeout http-request     15s
             listen stats
@@ -270,7 +240,7 @@ class ConfigHaproxy(object):
             '''
             ))
 
-        # TODO:  add more template depending on whether it's required. 
+        # TODO: add more template depending on whether it's required. 
 
     # override template from a template file. 
     def load_template(self):
